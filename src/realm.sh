@@ -14,7 +14,25 @@ realm_manager() {
         return 1
     fi
 
-    if [[ -f "$entry" ]]; then
+    if [[ -e "$entry" || -L "$entry" ]]; then
+        if [[ -L "$entry" || ! -f "$entry" ]] || ! grep -q '^# xwPF - Realm' "$entry"; then
+            msg "检测到 /usr/local/bin/xwPF.sh 已存在，但无法确认它属于 xwPF。为避免执行或覆盖其他文件，已停止。"
+            return 1
+        fi
+        if [[ "${1:-}" == "install" && ( -e /usr/local/bin/pf || -L /usr/local/bin/pf ) ]]; then
+            if [[ ! -L /usr/local/bin/pf || "$(readlink -f /usr/local/bin/pf 2>/dev/null)" != "$entry" ]]; then
+                msg "检测到 /usr/local/bin/pf 指向其他文件。为避免覆盖现有命令，已停止 xwPF 更新。"
+                return 1
+            fi
+        fi
+        if [[ $# -eq 0 ]]; then
+            for module in core.sh rules.sh server.sh realm.sh ui.sh; do
+                if [[ ! -f "$module_dir/$module" ]]; then
+                    msg "xwPF 模块不完整。请运行: sing-box realm install"
+                    return 1
+                fi
+            done
+        fi
         bash "$entry" "$@"
         return $?
     fi
@@ -27,7 +45,11 @@ realm_manager() {
     # xwPF's installer creates /usr/local/bin/pf and writes five modules to
     # /usr/local/bin/lib. Avoid overwriting unrelated commands or files.
     if [[ -e /usr/local/bin/pf || -L /usr/local/bin/pf ]]; then
-        msg "检测到 /usr/local/bin/pf 已存在。为避免覆盖现有命令，请先检查并移除冲突后再安装 xwPF。"
+        msg "检测到 /usr/local/bin/pf 已存在。为避免覆盖现有命令，请先检查冲突后再安装 xwPF。"
+        return 1
+    fi
+    if [[ -L "$module_dir" ]]; then
+        msg "检测到 $module_dir 是符号链接。为避免写入其他目录，已停止安装 xwPF。"
         return 1
     fi
     for module in core.sh rules.sh server.sh realm.sh ui.sh; do
